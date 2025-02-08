@@ -67,7 +67,7 @@
       </div>
       <div class="form-group">
         <label>Watermark Scale (<span id="wmScaleValue">20</span>%)</label>
-        <!-- Interpreted as percentage of the image's minimum dimension -->
+        <!-- Interpreted as a percentage of the image's minimum dimension -->
         <input type="range" id="wmScale" min="0" max="100" value="20">
       </div>
       <div class="form-group">
@@ -141,23 +141,32 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   
+  <!-- Main Script -->
   <script>
-  (function(){
+  window.addEventListener("DOMContentLoaded", function(){
+    // Declare global variables accessible to all functions.
+    var images = [];  // Array to hold image objects.
+    var currentScale = 1; // Used for editor preview scaling.
+    
+    // Load default watermark image.
+    var watermark = new Image();
+    var watermarkLoaded = false;
+    watermark.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABzUlEQVR4Xu2ZMU7DMBBF38qy7Ca7CgsXYy/AcqkOgm6xjoJhwHcQunId4AMyChj28uVfXjxoA1PRdJcPv2tyyEkCRIkSZIkSZIkSdJH8o2fAmblhLs1K/dWHvdwZ1TCLbS2I6HD+HQuS0rvDVXABlgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEmRJkmSJEmSJEmSJEnSf8B1XKo1Efx9xsAAAAASUVORK5CYII=";
+    watermark.onload = function(){ watermarkLoaded = true; };
+    
     ////////////////////////////
-    // Utility & Helper Functions
+    // Helper Functions
     ////////////////////////////
-
-    // Update text content of an element by id.
-    function updateDisplay(id, value){
+    
+    function updateDisplay(id, value) {
       document.getElementById(id).textContent = value;
     }
-
-    // Display gallery of images.
-    function displayGallery(){
-      const gallery = document.getElementById("gallery");
+    
+    function displayGallery() {
+      var gallery = document.getElementById("gallery");
       gallery.innerHTML = "";
-      images.forEach((imgObj, index) => {
-        const imgElem = document.createElement("img");
+      images.forEach(function(imgObj, index){
+        var imgElem = document.createElement("img");
         imgElem.src = imgObj.processedDataUrl ? imgObj.processedDataUrl : imgObj.originalDataUrl;
         imgElem.className = "thumbnail";
         imgElem.dataset.index = index;
@@ -165,177 +174,174 @@
         gallery.appendChild(imgElem);
       });
     }
-
-    // Compute the luminance histogram and perform histogram stretching.
-    // This function runs inside a Web Worker.
+    
+    // Worker for histogram stretching.
     function autoEnhanceHistogram(canvas, callback) {
-      const ctx = canvas.getContext("2d");
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      // Define the worker code as a string.
-      const workerCode = `
-      self.onmessage = function(e) {
-         var imageData = e.data;
-         var data = imageData.data;
-         var hist = new Array(256).fill(0);
-         var len = data.length;
-         for(var i=0; i<len; i+=4){
-             var lum = Math.floor(0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2]);
-             hist[lum]++;
-         }
-         var cum = new Array(256);
-         cum[0] = hist[0];
-         for(var i=1; i<256; i++){
-             cum[i] = cum[i-1] + hist[i];
-         }
-         var total = cum[255];
-         var lowerThreshold = total * 0.02;
-         var upperThreshold = total * 0.98;
-         var L_low = 0, L_high = 255;
-         for(var i=0; i<256; i++){
-             if(cum[i] >= lowerThreshold) { L_low = i; break; }
-         }
-         for(var i=255; i>=0; i--){
-             if(cum[i] <= upperThreshold) { L_high = i; break; }
-         }
-         var lut = new Array(256);
-         for(var i=0; i<256; i++){
-             if(i < L_low) lut[i] = 0;
-             else if(i > L_high) lut[i] = 255;
-             else {
-                 lut[i] = Math.round((i - L_low) / (L_high - L_low) * 255);
-             }
-         }
-         for(var i=0; i<len; i+=4){
-             data[i]   = lut[data[i]];
-             data[i+1] = lut[data[i+1]];
-             data[i+2] = lut[data[i+2]];
-         }
-         self.postMessage(imageData);
-      };`;
-      // Create a blob URL for the worker code.
-      const blob = new Blob([workerCode], { type: "application/javascript" });
-      const worker = new Worker(URL.createObjectURL(blob));
+      var ctx = canvas.getContext("2d");
+      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var workerCode = `
+        self.onmessage = function(e) {
+          var imageData = e.data;
+          var data = imageData.data;
+          var hist = new Array(256).fill(0);
+          var len = data.length;
+          for(var i = 0; i < len; i += 4) {
+            var lum = Math.floor(0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2]);
+            hist[lum]++;
+          }
+          var cum = new Array(256);
+          cum[0] = hist[0];
+          for(var i = 1; i < 256; i++){
+            cum[i] = cum[i-1] + hist[i];
+          }
+          var total = cum[255];
+          var lowerThreshold = total * 0.02;
+          var upperThreshold = total * 0.98;
+          var L_low = 0, L_high = 255;
+          for(var i = 0; i < 256; i++){
+            if(cum[i] >= lowerThreshold){ L_low = i; break; }
+          }
+          for(var i = 255; i >= 0; i--){
+            if(cum[i] <= upperThreshold){ L_high = i; break; }
+          }
+          var lut = new Array(256);
+          for(var i = 0; i < 256; i++){
+            if(i < L_low) lut[i] = 0;
+            else if(i > L_high) lut[i] = 255;
+            else {
+              lut[i] = Math.round((i - L_low) / (L_high - L_low) * 255);
+            }
+          }
+          for(var i = 0; i < len; i += 4) {
+            data[i] = lut[data[i]];
+            data[i+1] = lut[data[i+1]];
+            data[i+2] = lut[data[i+2]];
+          }
+          self.postMessage(imageData);
+        };
+      `;
+      var blob = new Blob([workerCode], { type: "application/javascript" });
+      var worker = new Worker(URL.createObjectURL(blob));
       worker.onmessage = function(e) {
-         ctx.putImageData(e.data, 0, 0);
-         worker.terminate();
-         callback();
+        ctx.putImageData(e.data, 0, 0);
+        worker.terminate();
+        callback();
       };
       worker.postMessage(imageData);
     }
-
-    // Apply vibrance adjustment with smooth falloff.
-    function applyVibrance(ctx, canvas, vibranceValue){
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const data = imageData.data;
-      const v = parseFloat(vibranceValue);
-      for(let i = 0; i < data.length; i += 4){
-        let r = data[i], g = data[i+1], b = data[i+2];
-        let hsl = rgbToHsl(r, g, b);
-        if(v > 0){
-          let factor = (hsl.s + 0.05) / 1.05;
+    
+    // Vibrance adjustment with smoother falloff.
+    function applyVibrance(ctx, canvas, vibranceValue) {
+      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      var data = imageData.data;
+      var v = parseFloat(vibranceValue);
+      for (var i = 0; i < data.length; i += 4) {
+        var r = data[i], g = data[i+1], b = data[i+2];
+        var hsl = rgbToHsl(r, g, b);
+        if (v > 0) {
+          var factor = (hsl.s + 0.05) / 1.05;
           hsl.s = hsl.s + (1 - hsl.s) * factor * (1 - Math.exp(-v / 300));
         } else {
-          let factor = (hsl.s + 0.05) / 1.05;
+          var factor = (hsl.s + 0.05) / 1.05;
           hsl.s = hsl.s - hsl.s * factor * (1 - Math.exp(-Math.abs(v) / 300));
         }
         hsl.s = Math.max(0, Math.min(1, hsl.s));
-        const rgb = hslToRgb(hsl.h, hsl.s, hsl.l);
+        var rgb = hslToRgb(hsl.h, hsl.s, hsl.l);
         data[i] = rgb.r; data[i+1] = rgb.g; data[i+2] = rgb.b;
       }
       ctx.putImageData(imageData, 0, 0);
     }
-
+    
     // RGB to HSL conversion.
-    function rgbToHsl(r, g, b){
+    function rgbToHsl(r, g, b) {
       r /= 255; g /= 255; b /= 255;
-      const max = Math.max(r, g, b), min = Math.min(r, g, b);
-      let h, s, l = (max + min) / 2;
-      if(max === min){ h = s = 0; }
+      var max = Math.max(r, g, b), min = Math.min(r, g, b);
+      var h, s, l = (max + min) / 2;
+      if (max === min) { h = s = 0; }
       else {
-        const d = max - min;
+        var d = max - min;
         s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-        switch(max){
+        switch(max) {
           case r: h = (g - b) / d + (g < b ? 6 : 0); break;
           case g: h = (b - r) / d + 2; break;
           case b: h = (r - g) / d + 4; break;
         }
         h /= 6;
       }
-      return { h, s, l };
+      return { h: h, s: s, l: l };
     }
-
+    
     // HSL to RGB conversion.
-    function hslToRgb(h, s, l){
-      let r, g, b;
-      if(s === 0){ r = g = b = l; }
+    function hslToRgb(h, s, l) {
+      var r, g, b;
+      if (s === 0) { r = g = b = l; }
       else {
-        const hue2rgb = function(p, q, t){
-          if(t < 0) t += 1;
-          if(t > 1) t -= 1;
-          if(t < 1/6) return p + (q - p) * 6 * t;
-          if(t < 1/2) return q;
-          if(t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+        function hue2rgb(p, q, t) {
+          if (t < 0) t += 1;
+          if (t > 1) t -= 1;
+          if (t < 1/6) return p + (q - p) * 6 * t;
+          if (t < 1/2) return q;
+          if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
           return p;
         }
-        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-        const p = 2 * l - q;
+        var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        var p = 2 * l - q;
         r = hue2rgb(p, q, h + 1/3);
         g = hue2rgb(p, q, h);
         b = hue2rgb(p, q, h - 1/3);
       }
       return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
     }
-
+    
     ////////////////////////////
-    // Core Image Processing Functions
+    // Core Image Processing
     ////////////////////////////
-
-    // Process a single full-resolution image.
+    
+    // Process full-resolution image.
     // opts: { brightness, contrast, saturation, hue, vibrance, wmOpacity, wmScale }
     function processImageFull(imgObj, opts, callback) {
-      const canvas = document.createElement("canvas");
-      const ctx = canvas.getContext("2d");
-      const image = new Image();
+      var canvas = document.createElement("canvas");
+      var ctx = canvas.getContext("2d");
+      var image = new Image();
       image.onload = function(){
         canvas.width = image.width;
         canvas.height = image.height;
         ctx.filter = `brightness(${opts.brightness}%) contrast(${opts.contrast}%) saturate(${opts.saturation}%) hue-rotate(${opts.hue}deg)`;
         ctx.drawImage(image, 0, 0);
         ctx.filter = "none";
-        if(parseFloat(opts.vibrance) !== 0){ 
+        if (parseFloat(opts.vibrance) !== 0) {
           applyVibrance(ctx, canvas, opts.vibrance);
         }
-        // If autoImprove is enabled, perform histogram stretching via the worker.
-        if(document.getElementById("autoImprove").checked) {
+        if (document.getElementById("autoImprove").checked) {
           autoEnhanceHistogram(canvas, function(){
-            if(watermarkLoaded) {
-              let m = Math.min(canvas.width, canvas.height);
-              let scalePercentage = opts.wmScale / 100; // watermark size as a percentage of the image's min dimension
-              let desiredSize = m * scalePercentage;
-              let factor = desiredSize / Math.max(watermark.width, watermark.height);
-              let finalWmWidth = watermark.width * factor;
-              let finalWmHeight = watermark.height * factor;
+            if (watermarkLoaded) {
+              var m = Math.min(canvas.width, canvas.height);
+              var scalePercentage = opts.wmScale / 100;
+              var desiredSize = m * scalePercentage;
+              var factor = desiredSize / Math.max(watermark.width, watermark.height);
+              var finalWmWidth = watermark.width * factor;
+              var finalWmHeight = watermark.height * factor;
               ctx.globalAlpha = opts.wmOpacity / 100;
-              let pos = imgObj.watermarkPosition;
-              if(pos.x + finalWmWidth > canvas.width) pos.x = canvas.width - finalWmWidth - 10;
-              if(pos.y + finalWmHeight > canvas.height) pos.y = canvas.height - finalWmHeight - 10;
+              var pos = imgObj.watermarkPosition;
+              if (pos.x + finalWmWidth > canvas.width) pos.x = canvas.width - finalWmWidth - 10;
+              if (pos.y + finalWmHeight > canvas.height) pos.y = canvas.height - finalWmHeight - 10;
               ctx.drawImage(watermark, pos.x, pos.y, finalWmWidth, finalWmHeight);
               ctx.globalAlpha = 1.0;
             }
             callback(canvas.toDataURL());
           });
         } else {
-          if(watermarkLoaded) {
-            let m = Math.min(canvas.width, canvas.height);
-            let scalePercentage = opts.wmScale / 100;
-            let desiredSize = m * scalePercentage;
-            let factor = desiredSize / Math.max(watermark.width, watermark.height);
-            let finalWmWidth = watermark.width * factor;
-            let finalWmHeight = watermark.height * factor;
+          if (watermarkLoaded) {
+            var m = Math.min(canvas.width, canvas.height);
+            var scalePercentage = opts.wmScale / 100;
+            var desiredSize = m * scalePercentage;
+            var factor = desiredSize / Math.max(watermark.width, watermark.height);
+            var finalWmWidth = watermark.width * factor;
+            var finalWmHeight = watermark.height * factor;
             ctx.globalAlpha = opts.wmOpacity / 100;
-            let pos = imgObj.watermarkPosition;
-            if(pos.x + finalWmWidth > canvas.width) pos.x = canvas.width - finalWmWidth - 10;
-            if(pos.y + finalWmHeight > canvas.height) pos.y = canvas.height - finalWmHeight - 10;
+            var pos = imgObj.watermarkPosition;
+            if (pos.x + finalWmWidth > canvas.width) pos.x = canvas.width - finalWmWidth - 10;
+            if (pos.y + finalWmHeight > canvas.height) pos.y = canvas.height - finalWmHeight - 10;
             ctx.drawImage(watermark, pos.x, pos.y, finalWmWidth, finalWmHeight);
             ctx.globalAlpha = 1.0;
           }
@@ -344,24 +350,24 @@
       };
       image.src = imgObj.originalDataUrl;
     }
-
+    
     ////////////////////////////
-    // Batch Processing (Async)
+    // Asynchronous Batch Processing
     ////////////////////////////
-
+    
     function processImagesBatch(index) {
-      if(index >= images.length) {
+      if (index >= images.length) {
         document.getElementById("downloadBtn").disabled = false;
         return;
       }
-      let imgObj = images[index];
-      // Update filters from global controls:
+      var imgObj = images[index];
+      // Update filters from global controls.
       imgObj.filters.brightness = document.getElementById("brightness").value;
       imgObj.filters.contrast = document.getElementById("contrast").value;
       imgObj.filters.saturation = document.getElementById("saturation").value;
       imgObj.filters.hue = document.getElementById("hue").value;
       imgObj.filters.vibrance = document.getElementById("vibrance").value;
-      const opts = {
+      var opts = {
         brightness: imgObj.filters.brightness,
         contrast: imgObj.filters.contrast,
         saturation: imgObj.filters.saturation,
@@ -373,38 +379,41 @@
       processImageFull(imgObj, opts, function(dataUrl) {
         imgObj.processedDataUrl = dataUrl;
         displayGallery();
-        setTimeout(function(){ processImagesBatch(index+1); }, 0);
+        setTimeout(function(){ processImagesBatch(index + 1); }, 0);
       });
     }
-
+    
+    document.getElementById("processBtn").addEventListener("click", function(){
+      if (images.length === 0) { alert("Please select images first."); return; }
+      document.getElementById("downloadBtn").disabled = true;
+      processImagesBatch(0);
+    });
+    
     ////////////////////////////
-    // Editor Modal Functions
+    // Editor Modal Logic
     ////////////////////////////
-
-    let currentEditIndex = null;
-    const editorModal = document.getElementById("editorModal");
-    const editorCanvas = document.getElementById("editorCanvas");
-    const editorCtx = editorCanvas.getContext("2d");
-
+    
+    var currentEditIndex = null;
+    var editorModal = document.getElementById("editorModal");
+    var editorCanvas = document.getElementById("editorCanvas");
+    var editorCtx = editorCanvas.getContext("2d");
+    
     function openEditor(e) {
       currentEditIndex = parseInt(e.target.dataset.index);
       openEditorForImage(images[currentEditIndex]);
     }
-
+    
     function openEditorForImage(imgObj) {
-      const image = new Image();
+      var image = new Image();
       image.onload = function(){
-        // Compute scale factor so preview fits (max 800x600)
-        const maxPreviewWidth = 800, maxPreviewHeight = 600;
-        const scale = Math.min(maxPreviewWidth / image.width, maxPreviewHeight / image.height, 1);
+        var maxPreviewWidth = 800, maxPreviewHeight = 600;
+        var scale = Math.min(maxPreviewWidth / image.width, maxPreviewHeight / image.height, 1);
         currentScale = scale;
         editorCanvas.width = image.width * scale;
         editorCanvas.height = image.height * scale;
-        // If watermark position not set, initialize it based on preview (converted to full-res coordinates)
-        if(imgObj.watermarkPosition.x === 0 && imgObj.watermarkPosition.y === 0){
+        if (imgObj.watermarkPosition.x === 0 && imgObj.watermarkPosition.y === 0) {
           imgObj.watermarkPosition = { x: (editorCanvas.width * 0.1) / currentScale, y: (editorCanvas.height * 0.1) / currentScale };
         }
-        // Set editor sliders with stored filter values.
         document.getElementById("editBrightness").value = imgObj.filters.brightness;
         document.getElementById("editContrast").value = imgObj.filters.contrast;
         document.getElementById("editSaturation").value = imgObj.filters.saturation;
@@ -415,13 +424,12 @@
         updateDisplay("editSaturationValue", imgObj.filters.saturation);
         updateDisplay("editHueValue", imgObj.filters.hue);
         updateDisplay("editVibranceValue", imgObj.filters.vibrance);
-        // For watermark settings, use stored values if available; otherwise use global defaults.
-        if(imgObj.wmOpacity !== null) {
+        if (imgObj.wmOpacity !== null) {
           document.getElementById("editWmOpacity").value = imgObj.wmOpacity;
         } else {
           document.getElementById("editWmOpacity").value = document.getElementById("wmOpacity").value;
         }
-        if(imgObj.wmScale !== null) {
+        if (imgObj.wmScale !== null) {
           document.getElementById("editWmScale").value = imgObj.wmScale;
         } else {
           document.getElementById("editWmScale").value = document.getElementById("wmScale").value;
@@ -433,58 +441,56 @@
       };
       image.src = imgObj.originalDataUrl;
     }
-
+    
     function redrawEditorCanvas(){
-      const imgObj = images[currentEditIndex];
-      const image = new Image();
+      var imgObj = images[currentEditIndex];
+      var image = new Image();
       image.onload = function(){
         editorCtx.clearRect(0, 0, editorCanvas.width, editorCanvas.height);
         editorCtx.filter = `brightness(${imgObj.filters.brightness}%) contrast(${imgObj.filters.contrast}%) saturate(${imgObj.filters.saturation}%) hue-rotate(${imgObj.filters.hue}deg)`;
         editorCtx.drawImage(image, 0, 0, editorCanvas.width, editorCanvas.height);
         editorCtx.filter = "none";
-        if(parseFloat(imgObj.filters.vibrance) !== 0){
+        if (parseFloat(imgObj.filters.vibrance) !== 0) {
           applyVibrance(editorCtx, editorCanvas, imgObj.filters.vibrance);
         }
-        if(watermarkLoaded){
-          // Compute watermark size based on preview's minimum dimension.
-          let m = Math.min(editorCanvas.width, editorCanvas.height);
-          let scalePercentage = parseFloat(document.getElementById("editWmScale").value) / 100;
-          let desiredSize = m * scalePercentage;
-          let factor = desiredSize / Math.max(watermark.width, watermark.height);
-          let finalWmWidth = watermark.width * factor;
-          let finalWmHeight = watermark.height * factor;
-          const wmOpacity = document.getElementById("editWmOpacity").value / 100;
+        if (watermarkLoaded) {
+          var m = Math.min(editorCanvas.width, editorCanvas.height);
+          var scalePercentage = parseFloat(document.getElementById("editWmScale").value) / 100;
+          var desiredSize = m * scalePercentage;
+          var factor = desiredSize / Math.max(watermark.width, watermark.height);
+          var finalWmWidth = watermark.width * factor;
+          var finalWmHeight = watermark.height * factor;
+          var wmOpacity = document.getElementById("editWmOpacity").value / 100;
           editorCtx.globalAlpha = wmOpacity;
-          let pos = { x: imgObj.watermarkPosition.x * currentScale, y: imgObj.watermarkPosition.y * currentScale };
+          var pos = { x: imgObj.watermarkPosition.x * currentScale, y: imgObj.watermarkPosition.y * currentScale };
           editorCtx.drawImage(watermark, pos.x, pos.y, finalWmWidth, finalWmHeight);
           editorCtx.globalAlpha = 1.0;
         }
       };
       image.src = imgObj.originalDataUrl;
     }
-
-    // Make watermark draggable in the editor.
-    let dragging = false, offset = { x: 0, y: 0 };
+    
+    var dragging = false, offset = { x: 0, y: 0 };
     editorCanvas.addEventListener("mousedown", function(e){
-      const rect = editorCanvas.getBoundingClientRect();
-      const x = e.clientX - rect.left, y = e.clientY - rect.top;
-      const wmScale = parseFloat(document.getElementById("editWmScale").value) / 100;
-      let m = Math.min(editorCanvas.width, editorCanvas.height);
-      let desiredSize = m * (parseFloat(document.getElementById("editWmScale").value) / 100);
-      let factor = desiredSize / Math.max(watermark.width, watermark.height);
-      const finalWmWidth = watermark.width * factor;
-      const finalWmHeight = watermark.height * factor;
-      const pos = { x: images[currentEditIndex].watermarkPosition.x * currentScale, y: images[currentEditIndex].watermarkPosition.y * currentScale };
-      if(x >= pos.x && x <= pos.x + finalWmWidth && y >= pos.y && y <= pos.y + finalWmHeight){
+      var rect = editorCanvas.getBoundingClientRect();
+      var x = e.clientX - rect.left, y = e.clientY - rect.top;
+      var wmScale = parseFloat(document.getElementById("editWmScale").value) / 100;
+      var m = Math.min(editorCanvas.width, editorCanvas.height);
+      var desiredSize = m * (parseFloat(document.getElementById("editWmScale").value) / 100);
+      var factor = desiredSize / Math.max(watermark.width, watermark.height);
+      var finalWmWidth = watermark.width * factor;
+      var finalWmHeight = watermark.height * factor;
+      var pos = { x: images[currentEditIndex].watermarkPosition.x * currentScale, y: images[currentEditIndex].watermarkPosition.y * currentScale };
+      if (x >= pos.x && x <= pos.x + finalWmWidth && y >= pos.y && y <= pos.y + finalWmHeight) {
         dragging = true;
         offset.x = x - pos.x;
         offset.y = y - pos.y;
       }
     });
     editorCanvas.addEventListener("mousemove", function(e){
-      if(dragging){
-        const rect = editorCanvas.getBoundingClientRect();
-        const x = e.clientX - rect.left, y = e.clientY - rect.top;
+      if (dragging) {
+        var rect = editorCanvas.getBoundingClientRect();
+        var x = e.clientX - rect.left, y = e.clientY - rect.top;
         images[currentEditIndex].watermarkPosition.x = (x - offset.x) / currentScale;
         images[currentEditIndex].watermarkPosition.y = (y - offset.y) / currentScale;
         redrawEditorCanvas();
@@ -492,11 +498,9 @@
     });
     editorCanvas.addEventListener("mouseup", function(){ dragging = false; });
     editorCanvas.addEventListener("mouseout", function(){ dragging = false; });
-
-    // Apply editor changes: process full-resolution image using editor settings.
+    
     document.getElementById("applyEdit").addEventListener("click", function(){
-      const imgObj = images[currentEditIndex];
-      // Save editor watermark settings so they persist.
+      var imgObj = images[currentEditIndex];
       imgObj.wmOpacity = document.getElementById("editWmOpacity").value;
       imgObj.wmScale = document.getElementById("editWmScale").value;
       imgObj.filters.brightness = document.getElementById("editBrightness").value;
@@ -504,7 +508,7 @@
       imgObj.filters.saturation = document.getElementById("editSaturation").value;
       imgObj.filters.hue = document.getElementById("editHue").value;
       imgObj.filters.vibrance = document.getElementById("editVibrance").value;
-      const opts = {
+      var opts = {
         brightness: imgObj.filters.brightness,
         contrast: imgObj.filters.contrast,
         saturation: imgObj.filters.saturation,
@@ -519,25 +523,39 @@
         editorModal.style.display = "none";
       });
     });
-
+    
     document.getElementById("closeEditor").addEventListener("click", function(){
       editorModal.style.display = "none";
     });
-
-    // --- Asynchronous Batch Processing ---
+    
+    document.getElementById("downloadBtn").addEventListener("click", function(){
+      var zip = new JSZip();
+      images.forEach(function(imgObj){
+        var dataUrl = imgObj.processedDataUrl ? imgObj.processedDataUrl : imgObj.originalDataUrl;
+        var base64Data = dataUrl.split(',')[1];
+        zip.file(imgObj.name, base64Data, { base64: true });
+      });
+      zip.generateAsync({ type: "blob" }).then(function(content){
+        saveAs(content, "processed_images.zip");
+      });
+    });
+    
+    ////////////////////////////
+    // Asynchronous Batch Processing
+    ////////////////////////////
+    
     function processImagesBatch(index) {
-      if(index >= images.length) {
+      if (index >= images.length) {
         document.getElementById("downloadBtn").disabled = false;
         return;
       }
-      let imgObj = images[index];
-      // Update filters from global controls:
+      var imgObj = images[index];
       imgObj.filters.brightness = document.getElementById("brightness").value;
       imgObj.filters.contrast = document.getElementById("contrast").value;
       imgObj.filters.saturation = document.getElementById("saturation").value;
       imgObj.filters.hue = document.getElementById("hue").value;
       imgObj.filters.vibrance = document.getElementById("vibrance").value;
-      const opts = {
+      var opts = {
         brightness: imgObj.filters.brightness,
         contrast: imgObj.filters.contrast,
         saturation: imgObj.filters.saturation,
@@ -552,27 +570,19 @@
         setTimeout(function(){ processImagesBatch(index+1); }, 0);
       });
     }
-
+    
     document.getElementById("processBtn").addEventListener("click", function(){
-      if(images.length === 0){ alert("Please select images first."); return; }
+      if (images.length === 0) { alert("Please select images first."); return; }
       document.getElementById("downloadBtn").disabled = true;
       processImagesBatch(0);
     });
-
-    // Download all processed images as ZIP.
-    document.getElementById("downloadBtn").addEventListener("click", function(){
-      const zip = new JSZip();
-      images.forEach((imgObj) => {
-        const dataUrl = imgObj.processedDataUrl ? imgObj.processedDataUrl : imgObj.originalDataUrl;
-        const base64Data = dataUrl.split(',')[1];
-        zip.file(imgObj.name, base64Data, { base64: true });
-      });
-      zip.generateAsync({ type: "blob" }).then(function(content){
-        saveAs(content, "processed_images.zip");
-      });
+    
+    // Add event listener for gallery thumbnails.
+    document.querySelectorAll(".thumbnail").forEach(function(thumbnail){
+      thumbnail.addEventListener("click", openEditor);
     });
-
-  })();
+    
+  });
   </script>
 </body>
 </html>
