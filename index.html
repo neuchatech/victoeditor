@@ -2,7 +2,7 @@
 <html>
 <head>
   <meta charset="utf-8">
-  <title>Victo Photo Editor - V2</title>
+  <title>Enhanced Photo Editor</title>
   <style>
     body { font-family: sans-serif; margin: 0; padding: 0; background: #f4f4f4; }
     header { background: #333; color: #fff; padding: 10px; text-align: center; }
@@ -17,13 +17,10 @@
     button { padding: 8px 12px; background: #333; color: #fff; border: none; border-radius: 3px; cursor: pointer; margin-top: 10px; }
     button:disabled { background: #999; cursor: not-allowed; }
     /* Editor modal styling */
-    #editorModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); 
-                   align-items: center; justify-content: center; z-index: 1000; }
-    #editorContent { background: #fff; padding: 20px; position: relative; max-width: 90%; max-height: 90%; 
-                     overflow-y: auto; border-radius: 5px; }
+    #editorModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 1000; }
+    #editorContent { background: #fff; padding: 20px; position: relative; max-width: 90%; max-height: 90%; overflow-y: auto; border-radius: 5px; }
     #editorCanvas { border: 1px solid #ccc; display: block; margin-bottom: 10px; }
-    #closeEditor { position: absolute; top: 10px; right: 10px; cursor: pointer; background: #ccc; 
-                   padding: 4px 8px; border-radius: 3px; }
+    #closeEditor { position: absolute; top: 10px; right: 10px; cursor: pointer; background: #ccc; padding: 4px 8px; border-radius: 3px; }
     #gallery { display: flex; flex-wrap: wrap; gap: 10px; }
   </style>
 </head>
@@ -67,7 +64,7 @@
       </div>
       <div class="form-group">
         <label>Watermark Scale (<span id="wmScaleValue">20</span>%)</label>
-        <!-- Interpreted as a percentage of the image's minimum dimension -->
+        <!-- Now interpreted as percentage of the image's minimum dimension -->
         <input type="range" id="wmScale" min="0" max="100" value="20">
       </div>
       <div class="form-group">
@@ -85,7 +82,7 @@
       <div class="form-group">
         <label>
           <input type="checkbox" id="autoImprove">
-          Auto Improve Image (uses histogram stretching)
+          Auto Improve Image (analyzes average brightness and adjusts contrast/brightness)
         </label>
       </div>
       <button id="processBtn">Process Images</button>
@@ -137,36 +134,254 @@
     </div>
   </div>
   
-  <!-- External libraries -->
+  <!-- External libraries from CDN -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
   
-  <!-- Main Script -->
   <script>
-  window.addEventListener("DOMContentLoaded", function(){
-    // Declare global variables accessible to all functions.
-    var images = [];  // Array to hold image objects.
-    var currentScale = 1; // Used for editor preview scaling.
-    
-    // Load default watermark image.
-    var watermark = new Image();
-    var watermarkLoaded = false;
-    watermark.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABzUlEQVR4Xu2ZMU7DMBBF38qy7Ca7CgsXYy/AcqkOgm6xjoJhwHcQunId4AMyChj28uVfXjxoA1PRdJcPv2tyyEkCRIkSZIkSZIkSdJH8o2fAmblhLs1K/dWHvdwZ1TCLbS2I6HD+HQuS0rvDVXABlgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEmRJkmSJEmSJEmSJEnSf8B1XKo1Efx9xsAAAAASUVORK5CYII=";
+  (function(){
+    // Global variables
+    let images = [];  // Each image object: { file, name, originalDataUrl, processedDataUrl, watermarkPosition, filters, width, height, wmOpacity, wmScale }
+    // filters: { brightness, contrast, saturation, hue, vibrance }
+    let currentScale = 1; // Used for editor preview scaling
+
+    // Load default watermark image (placeholder)
+    let watermark = new Image();
+    let watermarkLoaded = false;
+    watermark.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABzUlEQVR4Xu2ZMU7DMBBF38qy7Ca7CgsXYy/AcqkOgm6xjoJhwHcQunId4AMyChj28uVfXjxoA1PRdJcPv2tyyEkCRIkSZIkSZIkSdJH8o2fAmblhLs1K/dWHvdwZ1TCLbS2I6HD+HQuS0rvDVXABlgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEmRJkmSJEmSJEmSJEnSf8B1XKo1Efx9xsAAAAASUVORK5CYII=";
     watermark.onload = function(){ watermarkLoaded = true; };
-    
-    ////////////////////////////
-    // Helper Functions
-    ////////////////////////////
-    
-    function updateDisplay(id, value) {
-      document.getElementById(id).textContent = value;
+
+    // Utility: update slider display text
+    function updateDisplay(id, value){ document.getElementById(id).textContent = value; }
+
+    // Global slider events
+    document.getElementById("brightness").addEventListener("input", function(){ updateDisplay("brightnessValue", this.value); });
+    document.getElementById("contrast").addEventListener("input", function(){ updateDisplay("contrastValue", this.value); });
+    document.getElementById("saturation").addEventListener("input", function(){ updateDisplay("saturationValue", this.value); });
+    document.getElementById("hue").addEventListener("input", function(){ updateDisplay("hueValue", this.value); });
+    document.getElementById("vibrance").addEventListener("input", function(){ updateDisplay("vibranceValue", this.value); });
+    document.getElementById("wmOpacity").addEventListener("input", function(){ updateDisplay("wmOpacityValue", this.value); });
+    document.getElementById("wmScale").addEventListener("input", function(){ updateDisplay("wmScaleValue", this.value); });
+    document.getElementById("wmPosX").addEventListener("input", function(){ updateDisplay("wmPosXValue", this.value); });
+    document.getElementById("wmPosY").addEventListener("input", function(){ updateDisplay("wmPosYValue", this.value); });
+
+    // Editor slider events (for per-image settings)
+    document.getElementById("editBrightness").addEventListener("input", function(){
+      images[currentEditIndex].filters.brightness = this.value;
+      updateDisplay("editBrightnessValue", this.value);
+      redrawEditorCanvas();
+    });
+    document.getElementById("editContrast").addEventListener("input", function(){
+      images[currentEditIndex].filters.contrast = this.value;
+      updateDisplay("editContrastValue", this.value);
+      redrawEditorCanvas();
+    });
+    document.getElementById("editSaturation").addEventListener("input", function(){
+      images[currentEditIndex].filters.saturation = this.value;
+      updateDisplay("editSaturationValue", this.value);
+      redrawEditorCanvas();
+    });
+    document.getElementById("editHue").addEventListener("input", function(){
+      images[currentEditIndex].filters.hue = this.value;
+      updateDisplay("editHueValue", this.value);
+      redrawEditorCanvas();
+    });
+    document.getElementById("editVibrance").addEventListener("input", function(){
+      images[currentEditIndex].filters.vibrance = this.value;
+      updateDisplay("editVibranceValue", this.value);
+      redrawEditorCanvas();
+    });
+    document.getElementById("editWmOpacity").addEventListener("input", function(){
+      updateDisplay("editWmOpacityValue", this.value);
+      redrawEditorCanvas();
+    });
+    document.getElementById("editWmScale").addEventListener("input", function(){
+      updateDisplay("editWmScaleValue", this.value);
+      redrawEditorCanvas();
+    });
+
+    // Handle watermark file upload
+    document.getElementById("wm-upload").addEventListener("change", function(e){
+      const file = e.target.files[0];
+      if(file){
+        const reader = new FileReader();
+        reader.onload = function(ev){ watermark.src = ev.target.result; }
+        reader.readAsDataURL(file);
+      }
+    });
+
+    // Handle file selection – list images as soon as loaded
+    document.getElementById("file-input").addEventListener("change", function(e){
+      const files = e.target.files;
+      images = [];
+      let filesLoaded = 0;
+      for(let i = 0; i < files.length; i++){
+        const file = files[i];
+        if(file.type.match("image.*")){
+          const reader = new FileReader();
+          reader.onload = (function(f){
+            return function(ev){
+              const tempImg = new Image();
+              tempImg.onload = function(){
+                images.push({
+                  file: f,
+                  name: f.name,
+                  originalDataUrl: ev.target.result,
+                  processedDataUrl: null,
+                  watermarkPosition: { x: 0, y: 0 },
+                  filters: { brightness: 100, contrast: 100, saturation: 100, hue: 0, vibrance: 0 },
+                  width: tempImg.width,
+                  height: tempImg.height,
+                  wmOpacity: null,
+                  wmScale: null
+                });
+                filesLoaded++;
+                displayGallery();
+              }
+              tempImg.src = ev.target.result;
+            }
+          })(file);
+          reader.readAsDataURL(file);
+        }
+      }
+    });
+
+    // Compute average luminance for auto-enhance
+    function computeAutoEnhance(imgObj, callback){
+      const tempCanvas = document.createElement("canvas");
+      const tempCtx = tempCanvas.getContext("2d");
+      const tempImg = new Image();
+      tempImg.onload = function(){
+        tempCanvas.width = tempImg.width;
+        tempCanvas.height = tempImg.height;
+        tempCtx.drawImage(tempImg, 0, 0);
+        const imageData = tempCtx.getImageData(0, 0, tempImg.width, tempImg.height);
+        const data = imageData.data;
+        let totalLum = 0;
+        for(let i = 0; i < data.length; i += 4){
+          const lum = 0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2];
+          totalLum += lum;
+        }
+        const avgLum = totalLum / (data.length/4);
+        let brightness = 100, contrast = 100;
+        if(avgLum < 100){ brightness = 120; contrast = 110; }
+        else if(avgLum > 150){ brightness = 90; contrast = 90; }
+        callback({ brightness, contrast });
+      }
+      tempImg.src = imgObj.originalDataUrl;
     }
-    
-    function displayGallery() {
-      var gallery = document.getElementById("gallery");
+
+    // Improved vibrance adjustment with smoother falloff and extended range (-500 to 500)
+    function applyVibrance(ctx, canvas, vibranceValue){
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const data = imageData.data;
+      const v = parseFloat(vibranceValue);
+      for(let i = 0; i < data.length; i += 4){
+        let r = data[i], g = data[i+1], b = data[i+2];
+        let hsl = rgbToHsl(r, g, b);
+        if(v > 0){
+          // For positive vibrance, boost saturation with an additional dampening factor for very low s.
+          let factor = (hsl.s + 0.05) / 1.05;
+          hsl.s = hsl.s + (1 - hsl.s) * factor * (1 - Math.exp(-v / 300));
+        } else {
+          let factor = (hsl.s + 0.05) / 1.05;
+          hsl.s = hsl.s - hsl.s * factor * (1 - Math.exp(-Math.abs(v) / 300));
+        }
+        hsl.s = Math.max(0, Math.min(1, hsl.s));
+        const rgb = hslToRgb(hsl.h, hsl.s, hsl.l);
+        data[i] = rgb.r; data[i+1] = rgb.g; data[i+2] = rgb.b;
+      }
+      ctx.putImageData(imageData, 0, 0);
+    }
+
+    // RGB to HSL conversion
+    function rgbToHsl(r, g, b){
+      r /= 255; g /= 255; b /= 255;
+      const max = Math.max(r, g, b), min = Math.min(r, g, b);
+      let h, s, l = (max + min) / 2;
+      if(max === min){ h = s = 0; }
+      else {
+        const d = max - min;
+        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+        switch(max){
+          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+          case g: h = (b - r) / d + 2; break;
+          case b: h = (r - g) / d + 4; break;
+        }
+        h /= 6;
+      }
+      return { h, s, l };
+    }
+    // HSL to RGB conversion
+    function hslToRgb(h, s, l){
+      let r, g, b;
+      if(s === 0){ r = g = b = l; }
+      else {
+        const hue2rgb = function(p, q, t){
+          if(t < 0) t += 1;
+          if(t > 1) t -= 1;
+          if(t < 1/6) return p + (q - p) * 6 * t;
+          if(t < 1/2) return q;
+          if(t < 2/3) return p + (q - p) * (2/3 - t) * 6;
+          return p;
+        }
+        const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
+        const p = 2 * l - q;
+        r = hue2rgb(p, q, h + 1/3);
+        g = hue2rgb(p, q, h);
+        b = hue2rgb(p, q, h - 1/3);
+      }
+      return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
+    }
+
+    // Process full‑resolution image using options.
+    // opts: { brightness, contrast, saturation, hue, vibrance, wmOpacity, wmScale }
+    function processImageFull(imgObj, opts, callback){
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      const image = new Image();
+      image.onload = function(){
+        canvas.width = image.width;
+        canvas.height = image.height;
+        ctx.filter = `brightness(${opts.brightness}%) contrast(${opts.contrast}%) saturate(${opts.saturation}%) hue-rotate(${opts.hue}deg)`;
+        ctx.drawImage(image, 0, 0);
+        ctx.filter = "none";
+        if(parseFloat(opts.vibrance) !== 0){ applyVibrance(ctx, canvas, opts.vibrance); }
+        // For batch processing, update watermark position from global sliders if not set
+        if(document.getElementById("editorModal").style.display === "none"){
+          const wmPosXPercent = document.getElementById("wmPosX").value / 100;
+          const wmPosYPercent = document.getElementById("wmPosY").value / 100;
+          imgObj.watermarkPosition = { x: canvas.width * wmPosXPercent, y: canvas.height * wmPosYPercent };
+        }
+        if(watermarkLoaded){
+          const wmOpacity = opts.wmOpacity / 100;
+          // NEW: Compute watermark size based on the image's minimum dimension.
+          let m = Math.min(canvas.width, canvas.height);
+          let scalePercentage = opts.wmScale / 100;  // e.g., 20% means watermark will be 20% of m.
+          let desiredSize = m * scalePercentage;
+          // Compute factor so that watermark's largest dimension becomes desiredSize:
+          let factor = desiredSize / Math.max(watermark.width, watermark.height);
+          let finalWmWidth = watermark.width * factor;
+          let finalWmHeight = watermark.height * factor;
+          ctx.globalAlpha = wmOpacity;
+          let pos = imgObj.watermarkPosition;
+          // Ensure watermark stays within bounds.
+          if(pos.x + finalWmWidth > canvas.width) pos.x = canvas.width - finalWmWidth - 10;
+          if(pos.y + finalWmHeight > canvas.height) pos.y = canvas.height - finalWmHeight - 10;
+          ctx.drawImage(watermark, pos.x, pos.y, finalWmWidth, finalWmHeight);
+          ctx.globalAlpha = 1.0;
+        }
+        callback(canvas.toDataURL());
+      };
+      image.src = imgObj.originalDataUrl;
+    }
+
+    // Display gallery – show processed image if available, else original
+    function displayGallery(){
+      const gallery = document.getElementById("gallery");
       gallery.innerHTML = "";
-      images.forEach(function(imgObj, index){
-        var imgElem = document.createElement("img");
+      images.forEach((imgObj, index) => {
+        const imgElem = document.createElement("img");
         imgElem.src = imgObj.processedDataUrl ? imgObj.processedDataUrl : imgObj.originalDataUrl;
         imgElem.className = "thumbnail";
         imgElem.dataset.index = index;
@@ -174,246 +389,84 @@
         gallery.appendChild(imgElem);
       });
     }
-    
-    // Worker for histogram stretching.
-    function autoEnhanceHistogram(canvas, callback) {
-      var ctx = canvas.getContext("2d");
-      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var workerCode = `
-        self.onmessage = function(e) {
-          var imageData = e.data;
-          var data = imageData.data;
-          var hist = new Array(256).fill(0);
-          var len = data.length;
-          for(var i = 0; i < len; i += 4) {
-            var lum = Math.floor(0.299 * data[i] + 0.587 * data[i+1] + 0.114 * data[i+2]);
-            hist[lum]++;
-          }
-          var cum = new Array(256);
-          cum[0] = hist[0];
-          for(var i = 1; i < 256; i++){
-            cum[i] = cum[i-1] + hist[i];
-          }
-          var total = cum[255];
-          var lowerThreshold = total * 0.02;
-          var upperThreshold = total * 0.98;
-          var L_low = 0, L_high = 255;
-          for(var i = 0; i < 256; i++){
-            if(cum[i] >= lowerThreshold){ L_low = i; break; }
-          }
-          for(var i = 255; i >= 0; i--){
-            if(cum[i] <= upperThreshold){ L_high = i; break; }
-          }
-          var lut = new Array(256);
-          for(var i = 0; i < 256; i++){
-            if(i < L_low) lut[i] = 0;
-            else if(i > L_high) lut[i] = 255;
-            else {
-              lut[i] = Math.round((i - L_low) / (L_high - L_low) * 255);
-            }
-          }
-          for(var i = 0; i < len; i += 4) {
-            data[i] = lut[data[i]];
-            data[i+1] = lut[data[i+1]];
-            data[i+2] = lut[data[i+2]];
-          }
-          self.postMessage(imageData);
-        };
-      `;
-      var blob = new Blob([workerCode], { type: "application/javascript" });
-      var worker = new Worker(URL.createObjectURL(blob));
-      worker.onmessage = function(e) {
-        ctx.putImageData(e.data, 0, 0);
-        worker.terminate();
-        callback();
-      };
-      worker.postMessage(imageData);
-    }
-    
-    // Vibrance adjustment with smoother falloff.
-    function applyVibrance(ctx, canvas, vibranceValue) {
-      var imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      var data = imageData.data;
-      var v = parseFloat(vibranceValue);
-      for (var i = 0; i < data.length; i += 4) {
-        var r = data[i], g = data[i+1], b = data[i+2];
-        var hsl = rgbToHsl(r, g, b);
-        if (v > 0) {
-          var factor = (hsl.s + 0.05) / 1.05;
-          hsl.s = hsl.s + (1 - hsl.s) * factor * (1 - Math.exp(-v / 300));
-        } else {
-          var factor = (hsl.s + 0.05) / 1.05;
-          hsl.s = hsl.s - hsl.s * factor * (1 - Math.exp(-Math.abs(v) / 300));
-        }
-        hsl.s = Math.max(0, Math.min(1, hsl.s));
-        var rgb = hslToRgb(hsl.h, hsl.s, hsl.l);
-        data[i] = rgb.r; data[i+1] = rgb.g; data[i+2] = rgb.b;
-      }
-      ctx.putImageData(imageData, 0, 0);
-    }
-    
-    // RGB to HSL conversion.
-    function rgbToHsl(r, g, b) {
-      r /= 255; g /= 255; b /= 255;
-      var max = Math.max(r, g, b), min = Math.min(r, g, b);
-      var h, s, l = (max + min) / 2;
-      if (max === min) { h = s = 0; }
-      else {
-        var d = max - min;
-        s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-        switch(max) {
-          case r: h = (g - b) / d + (g < b ? 6 : 0); break;
-          case g: h = (b - r) / d + 2; break;
-          case b: h = (r - g) / d + 4; break;
-        }
-        h /= 6;
-      }
-      return { h: h, s: s, l: l };
-    }
-    
-    // HSL to RGB conversion.
-    function hslToRgb(h, s, l) {
-      var r, g, b;
-      if (s === 0) { r = g = b = l; }
-      else {
-        function hue2rgb(p, q, t) {
-          if (t < 0) t += 1;
-          if (t > 1) t -= 1;
-          if (t < 1/6) return p + (q - p) * 6 * t;
-          if (t < 1/2) return q;
-          if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-          return p;
-        }
-        var q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-        var p = 2 * l - q;
-        r = hue2rgb(p, q, h + 1/3);
-        g = hue2rgb(p, q, h);
-        b = hue2rgb(p, q, h - 1/3);
-      }
-      return { r: Math.round(r * 255), g: Math.round(g * 255), b: Math.round(b * 255) };
-    }
-    
-    ////////////////////////////
-    // Core Image Processing
-    ////////////////////////////
-    
-    // Process full-resolution image.
-    // opts: { brightness, contrast, saturation, hue, vibrance, wmOpacity, wmScale }
-    function processImageFull(imgObj, opts, callback) {
-      var canvas = document.createElement("canvas");
-      var ctx = canvas.getContext("2d");
-      var image = new Image();
-      image.onload = function(){
-        canvas.width = image.width;
-        canvas.height = image.height;
-        ctx.filter = `brightness(${opts.brightness}%) contrast(${opts.contrast}%) saturate(${opts.saturation}%) hue-rotate(${opts.hue}deg)`;
-        ctx.drawImage(image, 0, 0);
-        ctx.filter = "none";
-        if (parseFloat(opts.vibrance) !== 0) {
-          applyVibrance(ctx, canvas, opts.vibrance);
-        }
-        if (document.getElementById("autoImprove").checked) {
-          autoEnhanceHistogram(canvas, function(){
-            if (watermarkLoaded) {
-              var m = Math.min(canvas.width, canvas.height);
-              var scalePercentage = opts.wmScale / 100;
-              var desiredSize = m * scalePercentage;
-              var factor = desiredSize / Math.max(watermark.width, watermark.height);
-              var finalWmWidth = watermark.width * factor;
-              var finalWmHeight = watermark.height * factor;
-              ctx.globalAlpha = opts.wmOpacity / 100;
-              var pos = imgObj.watermarkPosition;
-              if (pos.x + finalWmWidth > canvas.width) pos.x = canvas.width - finalWmWidth - 10;
-              if (pos.y + finalWmHeight > canvas.height) pos.y = canvas.height - finalWmHeight - 10;
-              ctx.drawImage(watermark, pos.x, pos.y, finalWmWidth, finalWmHeight);
-              ctx.globalAlpha = 1.0;
-            }
-            callback(canvas.toDataURL());
+
+    // Batch processing using global settings
+    document.getElementById("processBtn").addEventListener("click", function(){
+      if(images.length === 0){ alert("Please select images first."); return; }
+      images.forEach((imgObj) => {
+        const autoImprove = document.getElementById("autoImprove").checked;
+        if(autoImprove){
+          computeAutoEnhance(imgObj, function(enhance){
+            imgObj.filters.brightness = enhance.brightness;
+            imgObj.filters.contrast = enhance.contrast;
+            imgObj.filters.saturation = document.getElementById("saturation").value;
+            imgObj.filters.hue = document.getElementById("hue").value;
+            imgObj.filters.vibrance = document.getElementById("vibrance").value;
+            const opts = {
+              brightness: imgObj.filters.brightness,
+              contrast: imgObj.filters.contrast,
+              saturation: imgObj.filters.saturation,
+              hue: imgObj.filters.hue,
+              vibrance: imgObj.filters.vibrance,
+              wmOpacity: document.getElementById("wmOpacity").value,
+              wmScale: document.getElementById("wmScale").value
+            };
+            processImageFull(imgObj, opts, function(dataUrl){
+              imgObj.processedDataUrl = dataUrl;
+              displayGallery();
+              if(images.every(img => img.processedDataUrl)) { document.getElementById("downloadBtn").disabled = false; }
+            });
           });
         } else {
-          if (watermarkLoaded) {
-            var m = Math.min(canvas.width, canvas.height);
-            var scalePercentage = opts.wmScale / 100;
-            var desiredSize = m * scalePercentage;
-            var factor = desiredSize / Math.max(watermark.width, watermark.height);
-            var finalWmWidth = watermark.width * factor;
-            var finalWmHeight = watermark.height * factor;
-            ctx.globalAlpha = opts.wmOpacity / 100;
-            var pos = imgObj.watermarkPosition;
-            if (pos.x + finalWmWidth > canvas.width) pos.x = canvas.width - finalWmWidth - 10;
-            if (pos.y + finalWmHeight > canvas.height) pos.y = canvas.height - finalWmHeight - 10;
-            ctx.drawImage(watermark, pos.x, pos.y, finalWmWidth, finalWmHeight);
-            ctx.globalAlpha = 1.0;
-          }
-          callback(canvas.toDataURL());
+          imgObj.filters.brightness = document.getElementById("brightness").value;
+          imgObj.filters.contrast = document.getElementById("contrast").value;
+          imgObj.filters.saturation = document.getElementById("saturation").value;
+          imgObj.filters.hue = document.getElementById("hue").value;
+          imgObj.filters.vibrance = document.getElementById("vibrance").value;
+          const opts = {
+            brightness: imgObj.filters.brightness,
+            contrast: imgObj.filters.contrast,
+            saturation: imgObj.filters.saturation,
+            hue: imgObj.filters.hue,
+            vibrance: imgObj.filters.vibrance,
+            wmOpacity: document.getElementById("wmOpacity").value,
+            wmScale: document.getElementById("wmScale").value
+          };
+          processImageFull(imgObj, opts, function(dataUrl){
+            imgObj.processedDataUrl = dataUrl;
+            displayGallery();
+            if(images.every(img => img.processedDataUrl)) { document.getElementById("downloadBtn").disabled = false; }
+          });
         }
-      };
-      image.src = imgObj.originalDataUrl;
-    }
-    
-    ////////////////////////////
-    // Asynchronous Batch Processing
-    ////////////////////////////
-    
-    function processImagesBatch(index) {
-      if (index >= images.length) {
-        document.getElementById("downloadBtn").disabled = false;
-        return;
-      }
-      var imgObj = images[index];
-      // Update filters from global controls.
-      imgObj.filters.brightness = document.getElementById("brightness").value;
-      imgObj.filters.contrast = document.getElementById("contrast").value;
-      imgObj.filters.saturation = document.getElementById("saturation").value;
-      imgObj.filters.hue = document.getElementById("hue").value;
-      imgObj.filters.vibrance = document.getElementById("vibrance").value;
-      var opts = {
-        brightness: imgObj.filters.brightness,
-        contrast: imgObj.filters.contrast,
-        saturation: imgObj.filters.saturation,
-        hue: imgObj.filters.hue,
-        vibrance: imgObj.filters.vibrance,
-        wmOpacity: document.getElementById("wmOpacity").value,
-        wmScale: document.getElementById("wmScale").value
-      };
-      processImageFull(imgObj, opts, function(dataUrl) {
-        imgObj.processedDataUrl = dataUrl;
-        displayGallery();
-        setTimeout(function(){ processImagesBatch(index + 1); }, 0);
       });
-    }
-    
-    document.getElementById("processBtn").addEventListener("click", function(){
-      if (images.length === 0) { alert("Please select images first."); return; }
-      document.getElementById("downloadBtn").disabled = true;
-      processImagesBatch(0);
     });
-    
-    ////////////////////////////
-    // Editor Modal Logic
-    ////////////////////////////
-    
-    var currentEditIndex = null;
-    var editorModal = document.getElementById("editorModal");
-    var editorCanvas = document.getElementById("editorCanvas");
-    var editorCtx = editorCanvas.getContext("2d");
-    
-    function openEditor(e) {
+
+    // --- Editor Modal Logic ---
+    let currentEditIndex = null;
+    const editorModal = document.getElementById("editorModal");
+    const editorCanvas = document.getElementById("editorCanvas");
+    const editorCtx = editorCanvas.getContext("2d");
+
+    // Open editor when a thumbnail is clicked.
+    function openEditor(e){
       currentEditIndex = parseInt(e.target.dataset.index);
       openEditorForImage(images[currentEditIndex]);
     }
-    
-    function openEditorForImage(imgObj) {
-      var image = new Image();
+
+    function openEditorForImage(imgObj){
+      const image = new Image();
       image.onload = function(){
-        var maxPreviewWidth = 800, maxPreviewHeight = 600;
-        var scale = Math.min(maxPreviewWidth / image.width, maxPreviewHeight / image.height, 1);
+        // Compute a scale factor so preview fits (max 800x600)
+        const maxPreviewWidth = 800, maxPreviewHeight = 600;
+        const scale = Math.min(maxPreviewWidth / image.width, maxPreviewHeight / image.height, 1);
         currentScale = scale;
         editorCanvas.width = image.width * scale;
         editorCanvas.height = image.height * scale;
-        if (imgObj.watermarkPosition.x === 0 && imgObj.watermarkPosition.y === 0) {
+        // If watermark position is still (0,0), initialize it to 10% of preview dimensions (converted back to original coordinates)
+        if(imgObj.watermarkPosition.x === 0 && imgObj.watermarkPosition.y === 0){
           imgObj.watermarkPosition = { x: (editorCanvas.width * 0.1) / currentScale, y: (editorCanvas.height * 0.1) / currentScale };
         }
+        // Use stored filter values (persist across openings)
         document.getElementById("editBrightness").value = imgObj.filters.brightness;
         document.getElementById("editContrast").value = imgObj.filters.contrast;
         document.getElementById("editSaturation").value = imgObj.filters.saturation;
@@ -424,12 +477,13 @@
         updateDisplay("editSaturationValue", imgObj.filters.saturation);
         updateDisplay("editHueValue", imgObj.filters.hue);
         updateDisplay("editVibranceValue", imgObj.filters.vibrance);
-        if (imgObj.wmOpacity !== null) {
+        // For editor watermark settings, use stored values if available, else default from global controls.
+        if(imgObj.wmOpacity !== null) {
           document.getElementById("editWmOpacity").value = imgObj.wmOpacity;
         } else {
           document.getElementById("editWmOpacity").value = document.getElementById("wmOpacity").value;
         }
-        if (imgObj.wmScale !== null) {
+        if(imgObj.wmScale !== null) {
           document.getElementById("editWmScale").value = imgObj.wmScale;
         } else {
           document.getElementById("editWmScale").value = document.getElementById("wmScale").value;
@@ -441,56 +495,59 @@
       };
       image.src = imgObj.originalDataUrl;
     }
-    
+
+    // Redraw the editor canvas (using preview scaling)
     function redrawEditorCanvas(){
-      var imgObj = images[currentEditIndex];
-      var image = new Image();
+      const imgObj = images[currentEditIndex];
+      const image = new Image();
       image.onload = function(){
         editorCtx.clearRect(0, 0, editorCanvas.width, editorCanvas.height);
         editorCtx.filter = `brightness(${imgObj.filters.brightness}%) contrast(${imgObj.filters.contrast}%) saturate(${imgObj.filters.saturation}%) hue-rotate(${imgObj.filters.hue}deg)`;
         editorCtx.drawImage(image, 0, 0, editorCanvas.width, editorCanvas.height);
         editorCtx.filter = "none";
-        if (parseFloat(imgObj.filters.vibrance) !== 0) {
+        if(parseFloat(imgObj.filters.vibrance) !== 0){
           applyVibrance(editorCtx, editorCanvas, imgObj.filters.vibrance);
         }
-        if (watermarkLoaded) {
-          var m = Math.min(editorCanvas.width, editorCanvas.height);
-          var scalePercentage = parseFloat(document.getElementById("editWmScale").value) / 100;
-          var desiredSize = m * scalePercentage;
-          var factor = desiredSize / Math.max(watermark.width, watermark.height);
-          var finalWmWidth = watermark.width * factor;
-          var finalWmHeight = watermark.height * factor;
-          var wmOpacity = document.getElementById("editWmOpacity").value / 100;
+        if(watermarkLoaded){
+          const wmOpacity = document.getElementById("editWmOpacity").value / 100;
+          // NEW: Compute watermark size based on the preview's minimum dimension.
+          let m = Math.min(editorCanvas.width, editorCanvas.height);
+          let scalePercentage = parseFloat(document.getElementById("editWmScale").value) / 100;
+          let desiredSize = m * scalePercentage;
+          let factor = desiredSize / Math.max(watermark.width, watermark.height);
+          let finalWmWidth = watermark.width * factor;
+          let finalWmHeight = watermark.height * factor;
           editorCtx.globalAlpha = wmOpacity;
-          var pos = { x: imgObj.watermarkPosition.x * currentScale, y: imgObj.watermarkPosition.y * currentScale };
+          let pos = { x: imgObj.watermarkPosition.x * currentScale, y: imgObj.watermarkPosition.y * currentScale };
           editorCtx.drawImage(watermark, pos.x, pos.y, finalWmWidth, finalWmHeight);
           editorCtx.globalAlpha = 1.0;
         }
       };
       image.src = imgObj.originalDataUrl;
     }
-    
-    var dragging = false, offset = { x: 0, y: 0 };
+
+    // Make watermark draggable in the editor.
+    let dragging = false, offset = { x: 0, y: 0 };
     editorCanvas.addEventListener("mousedown", function(e){
-      var rect = editorCanvas.getBoundingClientRect();
-      var x = e.clientX - rect.left, y = e.clientY - rect.top;
-      var wmScale = parseFloat(document.getElementById("editWmScale").value) / 100;
-      var m = Math.min(editorCanvas.width, editorCanvas.height);
-      var desiredSize = m * (parseFloat(document.getElementById("editWmScale").value) / 100);
-      var factor = desiredSize / Math.max(watermark.width, watermark.height);
-      var finalWmWidth = watermark.width * factor;
-      var finalWmHeight = watermark.height * factor;
-      var pos = { x: images[currentEditIndex].watermarkPosition.x * currentScale, y: images[currentEditIndex].watermarkPosition.y * currentScale };
-      if (x >= pos.x && x <= pos.x + finalWmWidth && y >= pos.y && y <= pos.y + finalWmHeight) {
+      const rect = editorCanvas.getBoundingClientRect();
+      const x = e.clientX - rect.left, y = e.clientY - rect.top;
+      const wmScale = parseFloat(document.getElementById("editWmScale").value) / 100;
+      let m = Math.min(editorCanvas.width, editorCanvas.height);
+      let desiredSize = m * (parseFloat(document.getElementById("editWmScale").value) / 100);
+      let factor = desiredSize / Math.max(watermark.width, watermark.height);
+      const finalWmWidth = watermark.width * factor;
+      const finalWmHeight = watermark.height * factor;
+      const pos = { x: images[currentEditIndex].watermarkPosition.x * currentScale, y: images[currentEditIndex].watermarkPosition.y * currentScale };
+      if(x >= pos.x && x <= pos.x + finalWmWidth && y >= pos.y && y <= pos.y + finalWmHeight){
         dragging = true;
         offset.x = x - pos.x;
         offset.y = y - pos.y;
       }
     });
     editorCanvas.addEventListener("mousemove", function(e){
-      if (dragging) {
-        var rect = editorCanvas.getBoundingClientRect();
-        var x = e.clientX - rect.left, y = e.clientY - rect.top;
+      if(dragging){
+        const rect = editorCanvas.getBoundingClientRect();
+        const x = e.clientX - rect.left, y = e.clientY - rect.top;
         images[currentEditIndex].watermarkPosition.x = (x - offset.x) / currentScale;
         images[currentEditIndex].watermarkPosition.y = (y - offset.y) / currentScale;
         redrawEditorCanvas();
@@ -498,9 +555,11 @@
     });
     editorCanvas.addEventListener("mouseup", function(){ dragging = false; });
     editorCanvas.addEventListener("mouseout", function(){ dragging = false; });
-    
+
+    // Apply editor changes: process full-res image using editor settings.
     document.getElementById("applyEdit").addEventListener("click", function(){
-      var imgObj = images[currentEditIndex];
+      const imgObj = images[currentEditIndex];
+      // Save editor watermark settings so they persist.
       imgObj.wmOpacity = document.getElementById("editWmOpacity").value;
       imgObj.wmScale = document.getElementById("editWmScale").value;
       imgObj.filters.brightness = document.getElementById("editBrightness").value;
@@ -508,7 +567,7 @@
       imgObj.filters.saturation = document.getElementById("editSaturation").value;
       imgObj.filters.hue = document.getElementById("editHue").value;
       imgObj.filters.vibrance = document.getElementById("editVibrance").value;
-      var opts = {
+      const opts = {
         brightness: imgObj.filters.brightness,
         contrast: imgObj.filters.contrast,
         saturation: imgObj.filters.saturation,
@@ -523,66 +582,35 @@
         editorModal.style.display = "none";
       });
     });
-    
+
     document.getElementById("closeEditor").addEventListener("click", function(){
       editorModal.style.display = "none";
     });
-    
+
+    // Download all processed images as ZIP
     document.getElementById("downloadBtn").addEventListener("click", function(){
-      var zip = new JSZip();
-      images.forEach(function(imgObj){
-        var dataUrl = imgObj.processedDataUrl ? imgObj.processedDataUrl : imgObj.originalDataUrl;
-        var base64Data = dataUrl.split(',')[1];
+      const zip = new JSZip();
+      images.forEach((imgObj) => {
+        const dataUrl = imgObj.processedDataUrl ? imgObj.processedDataUrl : imgObj.originalDataUrl;
+        const base64Data = dataUrl.split(',')[1];
         zip.file(imgObj.name, base64Data, { base64: true });
       });
       zip.generateAsync({ type: "blob" }).then(function(content){
         saveAs(content, "processed_images.zip");
       });
     });
-    
-    ////////////////////////////
-    // Asynchronous Batch Processing
-    ////////////////////////////
-    
-    function processImagesBatch(index) {
-      if (index >= images.length) {
-        document.getElementById("downloadBtn").disabled = false;
-        return;
-      }
-      var imgObj = images[index];
-      imgObj.filters.brightness = document.getElementById("brightness").value;
-      imgObj.filters.contrast = document.getElementById("contrast").value;
-      imgObj.filters.saturation = document.getElementById("saturation").value;
-      imgObj.filters.hue = document.getElementById("hue").value;
-      imgObj.filters.vibrance = document.getElementById("vibrance").value;
-      var opts = {
-        brightness: imgObj.filters.brightness,
-        contrast: imgObj.filters.contrast,
-        saturation: imgObj.filters.saturation,
-        hue: imgObj.filters.hue,
-        vibrance: imgObj.filters.vibrance,
-        wmOpacity: document.getElementById("wmOpacity").value,
-        wmScale: document.getElementById("wmScale").value
-      };
-      processImageFull(imgObj, opts, function(dataUrl) {
-        imgObj.processedDataUrl = dataUrl;
-        displayGallery();
-        setTimeout(function(){ processImagesBatch(index+1); }, 0);
-      });
-    }
-    
-    document.getElementById("processBtn").addEventListener("click", function(){
-      if (images.length === 0) { alert("Please select images first."); return; }
-      document.getElementById("downloadBtn").disabled = true;
-      processImagesBatch(0);
-    });
-    
-    // Add event listener for gallery thumbnails.
-    document.querySelectorAll(".thumbnail").forEach(function(thumbnail){
-      thumbnail.addEventListener("click", openEditor);
-    });
-    
-  });
+
+    /* 
+    Auto‑Enhance Explanation:
+    -------------------------
+    When “Auto Improve” is enabled, the script computes the average luminance of the image
+    (using 0.299×R + 0.587×G + 0.114×B for each pixel). If the average is below 100 (dark),
+    it increases brightness to 120% and contrast to 110% to lift the shadows; if above 150 (bright),
+    it lowers both to 90% to avoid washout. Otherwise, 100% is used.
+    This simple heuristic works in many cases, though it is not as sophisticated as commercial methods.
+    */
+
+  })();
   </script>
 </body>
 </html>
