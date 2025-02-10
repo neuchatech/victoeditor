@@ -17,11 +17,54 @@
     button { padding: 8px 12px; background: #333; color: #fff; border: none; border-radius: 3px; cursor: pointer; margin-top: 10px; }
     button:disabled { background: #999; cursor: not-allowed; }
     /* Editor modal styling */
-    #editorModal { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); align-items: center; justify-content: center; z-index: 1000; }
-    #editorContent { background: #fff; padding: 20px; position: relative; max-width: 90%; max-height: 90%; overflow-y: auto; border-radius: 5px; }
+    #editorModal { 
+      display: none; 
+      position: fixed; 
+      top: 0; 
+      left: 0; 
+      width: 100%; 
+      height: 100%; 
+      background: rgba(0,0,0,0.8); 
+      align-items: center; 
+      justify-content: center; 
+      z-index: 1000; 
+    }
+    #editorContent { 
+      background: #fff; 
+      padding: 20px; 
+      position: relative; 
+      max-width: 80%; 
+      max-height: 90%; 
+      overflow-y: auto; 
+      border-radius: 5px;
+    }
     #editorCanvas { border: 1px solid #ccc; display: block; margin-bottom: 10px; }
     #closeEditor { position: absolute; top: 10px; right: 10px; cursor: pointer; background: #ccc; padding: 4px 8px; border-radius: 3px; }
     #gallery { display: flex; flex-wrap: wrap; gap: 10px; }
+    .nav-button {
+      position: fixed;
+      top: 50%;
+      transform: translateY(-50%);
+      background: rgba(0,0,0,0.7);
+      color: white;
+      border: none;
+      padding: 20px;
+      cursor: pointer;
+      border-radius: 3px;
+      font-size: 24px;
+      transition: all 0.2s;
+      z-index: 1100;
+    }
+    #prevImage {
+      left: 20px;
+    }
+    #nextImage {
+      right: 20px;
+    }
+    .nav-button:hover {
+      background: rgba(0,0,0,0.9);
+      transform: translateY(-50%) scale(1.1);
+    }
   </style>
 </head>
 <body>
@@ -33,8 +76,8 @@
     <div class="panel" id="globalSettings">
       <h2>Global Settings</h2>
       <div class="form-group">
-        <label for="file-input">Select Images:</label>
-        <input type="file" id="file-input" multiple accept="image/*">
+        <label for="file-input">Select Images or Folders:</label>
+        <input type="file" id="file-input" multiple accept="image/*" webkitdirectory directory>
       </div>
       <div class="form-group">
         <label>Brightness (<span id="brightnessValue">100</span>%)</label>
@@ -97,9 +140,15 @@
   
   <!-- Editor Modal -->
   <div id="editorModal">
+    <button id="prevImage" class="nav-button">←</button>
     <div id="editorContent">
       <span id="closeEditor">[Close]</span>
-      <canvas id="editorCanvas"></canvas>
+      <div style="position: relative;">
+        <canvas id="editorCanvas"></canvas>
+        <div style="position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.5); color: white; padding: 5px 10px; border-radius: 3px;">
+          <span id="imageCounter">Image 1 of 1</span>
+        </div>
+      </div>
       <div class="form-group">
         <label>Brightness (<span id="editBrightnessValue">100</span>%)</label>
         <input type="range" id="editBrightness" min="0" max="200" value="100">
@@ -131,6 +180,7 @@
       <p>Drag the watermark on the image to reposition it.</p>
       <button id="applyEdit">Apply Changes</button>
     </div>
+    <button id="nextImage" class="nav-button">→</button>
   </div>
   
   <!-- External libraries from CDN -->
@@ -147,7 +197,7 @@
     // Load default watermark image (placeholder)
     let watermark = new Image();
     let watermarkLoaded = false;
-    watermark.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABzUlEQVR4Xu2ZMU7DMBBF38qy7Ca7CgsXYy/AcqkOgm6xjoJhwHcQunId4AMyChj28uVfXjxoA1PRdJcPv2tyyEkCRIkSZIkSZIkSdJH8o2fAmblhLs1K/dWHvdwZ1TCLbS2I6HD+HQuS0rvDVXABlgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEmRJkmSJEmSJEmSJEnSf8B1XKo1Efx9xsAAAAASUVORK5CYII=";
+    watermark.src = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAYAAACqaXHeAAABzUlEQVR4Xu2ZMU7DMBBF38qy7Ca7CgsXYy/AcqkOgm6xjoJhwHcQunId4AMyChj28uVfXjxoA1PRdJcPv2tyyEkCRIkSZIkSZIkSdJH8o2fAmblhLs1K/dWHvdwZ1TCLbS2I6HD+HQuS0rvDVXABlgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEZgBGYARmAEmRJkmSJEmSJEmSJEnSf8B1XKo1Efx9xsAAAAASUVORK5CYII=";
     watermark.onload = function(){ watermarkLoaded = true; };
 
     // Utility: update slider display text
@@ -209,41 +259,143 @@
       }
     });
 
-    // Handle file selection – list images as soon as loaded
-    document.getElementById("file-input").addEventListener("change", function(e){
-      const files = e.target.files;
+    // Handle file and folder selection
+    function handleFiles(files) {
       images = [];
       let filesLoaded = 0;
-      for(let i = 0; i < files.length; i++){
-        const file = files[i];
+      
+      function processFile(file) {
         if(file.type.match("image.*")){
           const reader = new FileReader();
-          reader.onload = (function(f){
-            return function(ev){
-              const tempImg = new Image();
-              tempImg.onload = function(){
-                images.push({
-                  file: f,
-                  name: f.name,
-                  originalDataUrl: ev.target.result,
-                  processedDataUrl: null,
-                  watermarkPosition: { x: 0, y: 0 },
-                  filters: { brightness: 100, contrast: 100, saturation: 100, hue: 0, vibrance: 0 },
-                  width: tempImg.width,
-                  height: tempImg.height,
-                  wmOpacity: null,
-                  wmScale: null
-                });
-                filesLoaded++;
-                displayGallery();
-              }
-              tempImg.src = ev.target.result;
+          reader.onload = function(ev){
+            const tempImg = new Image();
+            tempImg.onload = function(){
+              images.push({
+                file: file,
+                name: file.name,
+                originalDataUrl: ev.target.result,
+                processedDataUrl: null,
+                watermarkPosition: { x: 0, y: 0 },
+                filters: { brightness: 100, contrast: 100, saturation: 100, hue: 0, vibrance: 0 },
+                width: tempImg.width,
+                height: tempImg.height,
+                wmOpacity: null,
+                wmScale: null
+              });
+              filesLoaded++;
+              displayGallery();
             }
-          })(file);
+            tempImg.src = ev.target.result;
+          }
           reader.readAsDataURL(file);
         }
       }
+
+      // Convert FileList to Array for easier handling
+      Array.from(files).forEach(processFile);
+    }
+
+    // File input change handler
+    document.getElementById("file-input").addEventListener("change", function(e){
+      handleFiles(e.target.files);
     });
+
+    // Drag and drop handlers
+    /*const dropZone = document.getElementById("drop-zone");
+    
+    dropZone.addEventListener("dragover", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.style.background = "#eee";
+    });
+
+    dropZone.addEventListener("dragleave", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.style.background = "none";
+    });
+
+    dropZone.addEventListener("drop", function(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      this.style.background = "none";
+      
+      const items = e.dataTransfer.items;
+      const files = [];
+      
+      function traverseFileTree(item, path) {
+        path = path || "";
+        if (item.isFile) {
+          item.file(function(file) {
+            if (file.type.match("image.*")) {
+              files.push(file);
+            }
+          });
+        } else if (item.isDirectory) {
+          const dirReader = item.createReader();
+          dirReader.readEntries(function(entries) {
+            for (let i = 0; i < entries.length; i++) {
+              traverseFileTree(entries[i], path + item.name + "/");
+            }
+          });
+        }
+      }
+
+      for (let i = 0; i < items.length; i++) {
+        const item = items[i].webkitGetAsEntry();
+        if (item) {
+          traverseFileTree(item);
+        }
+      }
+
+      // Wait a bit for async file tree traversal to complete
+      setTimeout(() => {
+        if (files.length > 0) {
+          handleFiles(files);
+        }
+      }, 100);
+    });*/
+
+    // Editor navigation
+    function updateImageCounter() {
+      document.getElementById("imageCounter").textContent = `Image ${currentEditIndex + 1} of ${images.length}`;
+    }
+
+    function navigateToImage(index) {
+      if (index >= 0 && index < images.length) {
+        currentEditIndex = index;
+        openEditorForImage(images[currentEditIndex]);
+        updateImageCounter();
+      }
+    }
+
+    document.getElementById("prevImage").addEventListener("click", function() {
+      navigateToImage(currentEditIndex - 1);
+    });
+
+    document.getElementById("nextImage").addEventListener("click", function() {
+      navigateToImage(currentEditIndex + 1);
+    });
+
+    // Keyboard navigation
+    document.addEventListener("keydown", function(e) {
+      if (document.getElementById("editorModal").style.display === "flex") {
+        if (e.key === "ArrowLeft") {
+          navigateToImage(currentEditIndex - 1);
+        } else if (e.key === "ArrowRight") {
+          navigateToImage(currentEditIndex + 1);
+        } else if (e.key === "Escape") {
+          document.getElementById("editorModal").style.display = "none";
+        }
+      }
+    });
+
+    // Update the openEditor function to initialize the counter
+    const originalOpenEditor = openEditor;
+    openEditor = function(e) {
+      originalOpenEditor(e);
+      updateImageCounter();
+    };
 
     // Compute average luminance for auto-enhance
     function computeAutoEnhance(imgObj, callback){
@@ -505,24 +657,41 @@
     // Batch processing using global settings
     document.getElementById("processBtn").addEventListener("click", function(){
       if(images.length === 0){ alert("Please select images first."); return; }
+      
+      // Get global settings once
+      const globalSettings = {
+        brightness: document.getElementById("brightness").value,
+        contrast: document.getElementById("contrast").value,
+        saturation: document.getElementById("saturation").value,
+        hue: document.getElementById("hue").value,
+        vibrance: document.getElementById("vibrance").value,
+        wmOpacity: document.getElementById("wmOpacity").value,
+        wmScale: document.getElementById("wmScale").value,
+        wmPosX: document.getElementById("wmPosX").value,
+        wmPosY: document.getElementById("wmPosY").value
+      };
+
       images.forEach((imgObj) => {
         const autoImprove = document.getElementById("autoImprove").checked;
+        
+        // Update watermark position from global settings
+        const wmPosXPercent = globalSettings.wmPosX / 100;
+        const wmPosYPercent = globalSettings.wmPosY / 100;
+        imgObj.watermarkPosition = { 
+          x: imgObj.width * wmPosXPercent, 
+          y: imgObj.height * wmPosYPercent 
+        };
+
         if(autoImprove){
           computeAutoEnhance(imgObj, function(enhance){
-            imgObj.filters.brightness = enhance.brightness;
-            imgObj.filters.contrast = enhance.contrast;
-            imgObj.filters.saturation = document.getElementById("saturation").value;
-            imgObj.filters.hue = document.getElementById("hue").value;
-            imgObj.filters.vibrance = document.getElementById("vibrance").value;
+            // After auto-enhance, apply global settings
             const opts = {
-              brightness: imgObj.filters.brightness,
-              contrast: imgObj.filters.contrast,
-              saturation: imgObj.filters.saturation,
-              hue: imgObj.filters.hue,
-              vibrance: imgObj.filters.vibrance,
-              wmOpacity: document.getElementById("wmOpacity").value,
-              wmScale: document.getElementById("wmScale").value
+              ...globalSettings,  // Apply global settings
+              wmOpacity: globalSettings.wmOpacity,
+              wmScale: globalSettings.wmScale
             };
+            // Store the settings in the image object
+            imgObj.filters = { ...opts };
             processImageFull(imgObj, opts, function(dataUrl){
               imgObj.processedDataUrl = dataUrl;
               displayGallery();
@@ -530,20 +699,13 @@
             });
           });
         } else {
-          imgObj.filters.brightness = document.getElementById("brightness").value;
-          imgObj.filters.contrast = document.getElementById("contrast").value;
-          imgObj.filters.saturation = document.getElementById("saturation").value;
-          imgObj.filters.hue = document.getElementById("hue").value;
-          imgObj.filters.vibrance = document.getElementById("vibrance").value;
           const opts = {
-            brightness: imgObj.filters.brightness,
-            contrast: imgObj.filters.contrast,
-            saturation: imgObj.filters.saturation,
-            hue: imgObj.filters.hue,
-            vibrance: imgObj.filters.vibrance,
-            wmOpacity: document.getElementById("wmOpacity").value,
-            wmScale: document.getElementById("wmScale").value
+            ...globalSettings,  // Apply global settings
+            wmOpacity: globalSettings.wmOpacity,
+            wmScale: globalSettings.wmScale
           };
+          // Store the settings in the image object
+          imgObj.filters = { ...opts };
           processImageFull(imgObj, opts, function(dataUrl){
             imgObj.processedDataUrl = dataUrl;
             displayGallery();
